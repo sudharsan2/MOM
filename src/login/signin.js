@@ -258,6 +258,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -290,28 +291,29 @@ const LoginScreen = () => {
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
-      navigation.navigate('InspectionReport');
+      // navigation.navigate('InspectionReport');
       return;
     }
   
     setLoading(true);
     try {
-      const response = await fetch('https://your-api.com/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
-  
+      const response = await fetch('https://precotmeetingapp.focusrtech.com:67/rpl/signin/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: email, // Use "username" instead of "email"
+        password:password,       // Keep the password key the same
+      }),
+    });
       const data = await response.json();
+
+      console.log(data)
   
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
-        navigation.navigate('InspectionReport');
+        // navigation.navigate('InspectionReport');
       }
   
       console.log('Login successful:', data);
@@ -330,69 +332,75 @@ const LoginScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoid}
-      >
-        <Animated.View 
-          style={[
-            styles.contentContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
+  <KeyboardAvoidingView 
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    style={styles.keyboardAvoid}
+  >
+    <Animated.View 
+      style={[
+        styles.contentContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      {/* Add the image here */}
+      <View style={styles.imageContainer}>
+        <Image 
+          source={require('../../assets/login.jpg')} // Replace with your image path
+          style={styles.logo}
+          resizeMode="contain" // Optional, ensures the image maintains aspect ratio
+        />
+      </View>
+
+      <View style={[styles.headerContainer,{marginTop:20}]}>
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.subtitle}>Sign in to your account</Text>
+      </View>
+
+      <View style={styles.formContainer}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your email"
+            placeholderTextColor="#999"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+        </View>
+
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={handleLogin}
+          disabled={loading}
         >
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
-          </View>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.loginButtonText}>Sign In</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  </KeyboardAvoidingView>
+</SafeAreaView>
 
-          <View style={styles.formContainer}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor="#999"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                placeholderTextColor="#999"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
-            </View>
-
-            {/* <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity> */}
-
-            <TouchableOpacity 
-              style={styles.loginButton}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
   );
 };
 

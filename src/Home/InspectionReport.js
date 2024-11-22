@@ -1570,42 +1570,27 @@
 
 
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   Modal,
   TextInput,
   Animated,
-  FlatList,
-  Platform,
   Dimensions,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
+const API_URL = 'https://precotmeetingapp.focusrtech.com:67/rpl/meetingsList/';
+
 const MeetingsScreen = () => {
-  const [meetings, setMeetings] = useState([
-    {
-      id: '1',
-      title: 'Q4 Strategy Planning',
-      date: new Date('2024-11-16T10:00:00'),
-      participants: 8,
-      status: 'Completed'
-    },
-    {
-      id: '2',
-      title: 'Product Review',
-      date: new Date('2024-11-17T14:30:00'),
-      participants: 5,
-      status: 'Pending'
-    }
-  ]);
-  
+  const [meetings, setMeetings] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMeeting, setNewMeeting] = useState({
     title: '',
@@ -1614,11 +1599,28 @@ const MeetingsScreen = () => {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const navigation = useNavigation();
-  
-  React.useEffect(() => {
+
+  // Fetch meetings from API
+  const fetchMeetings = async () => {
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setMeetings(data);
+    } catch (error) {
+      console.error('Failed to fetch meetings:', error);
+      Alert.alert('Error', 'Failed to load meetings.');
+    }
+  };
+
+  useEffect(() => {
+    fetchMeetings();
+
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
@@ -1626,57 +1628,82 @@ const MeetingsScreen = () => {
     }).start();
   }, []);
 
-  const handleAddMeeting = () => {
+  const handleAddMeeting = async () => {
     const newMeetingData = {
-      id: Date.now().toString(),
       title: newMeeting.title,
-      date: new Date(newMeeting.date),
-      participants: 0,
-      status: 'Pending'
+      date: newMeeting.date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+      time: newMeeting.time.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      participants: [],
+      agendas: [],
+      action_plans: [],
     };
-    setMeetings([...meetings, newMeetingData]);
-    setModalVisible(false);
-    setNewMeeting({ title: '', date: new Date(), time: new Date() });
+
+    try {
+      const response = await fetch("https://precotmeetingapp.focusrtech.com:67/rpl/meetings/", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newMeetingData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Refresh meetings list
+      fetchMeetings();
+      setModalVisible(false);
+      setNewMeeting({ title: '', date: new Date(), time: new Date() });
+      Alert.alert('Success', 'Meeting added successfully!');
+    } catch (error) {
+      console.error('Failed to add meeting:', error);
+      Alert.alert('Error', 'Failed to add meeting.');
+    }
   };
 
   const renderMeetingCard = ({ item }) => (
     <Animated.View style={[styles.cardContainer, { opacity: fadeAnim }]}>
       <TouchableOpacity 
         style={styles.card}
-        onPress={() => navigation.navigate('ReportList', { meeting: item })}
+        onPress={() => navigation.navigate('ReportList', item)}
       >
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{item.title}</Text>
           <View style={[
             styles.statusBadge,
-            { backgroundColor: item.status === 'Completed' ? '#4CAF50' : '#FFC107' }
+            { backgroundColor: item.status === 'Saved' ? '#FFC107' :item.status === 'Submit'? '#4CAF50':'#FFC107' }
           ]}>
-            <Text style={styles.statusText}>{item.status}</Text>
+            {item.status === 'Saved' ?(
+            <Text style={styles.statusText}>Pending</Text>):item.status === 'Submit' ?(<Text style={styles.statusText}>Completed</Text>)
+            :(<Text style={styles.statusText}>Pending</Text>)
+            }
           </View>
         </View>
         
         <View style={styles.cardContent}>
           <Text style={styles.dateText}>
-            {item.date.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+            {item.date}
           </Text>
           <Text style={styles.timeText}>
-            {item.date.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {item.time}
           </Text>
         </View>
         
         <View style={styles.cardFooter}>
           <Text style={styles.participantsText}>
-            {item.participants} Participants
+            {item.participants.length} Participants
           </Text>
-          <TouchableOpacity style={styles.viewDetailsButton}>
+          <TouchableOpacity style={styles.viewDetailsButton}
+          onPress={() => navigation.navigate('ReportList', item)}>
             <Text style={styles.viewDetailsText}>View Details</Text>
           </TouchableOpacity>
         </View>
@@ -1699,7 +1726,7 @@ const MeetingsScreen = () => {
       <FlatList
         data={meetings}
         renderItem={renderMeetingCard}
-        keyExtractor={item => item.id}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
       />
@@ -1782,6 +1809,12 @@ const MeetingsScreen = () => {
     </SafeAreaView>
   );
 };
+
+
+
+
+
+
 
 const styles = StyleSheet.create({
   container: {

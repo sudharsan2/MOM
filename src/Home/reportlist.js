@@ -374,29 +374,136 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Signature from 'react-native-signature-canvas';
+import SignatureScreen from 'react-native-signature-canvas';
 
 const MeetingDetailScreen = ({ route }) => {
-  const { meeting } = route.params;
-  const [participants, setParticipants] = useState([]);
+  const meeting = route.params;
+  
+  // Parse the date string to create a Date object
+  const meetingDate = new Date(meeting.date);
+
+  const [participants, setParticipants] = useState(meeting.participants || []);
+  const [payloadParticipants, setPayloadParticipants] = useState([]);
   const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [signature, setSignature] = useState(null);
-  const signatureRef = useRef();
+  const [agendas, setAgendas] = useState(meeting.agendas || []);
+  const [payloadAgendas, setPayloadAgendas] = useState([]);
+  const [actionPlans, setActionPlans] = useState(meeting.action_plans || []);
+  const [payloadActionPlans, setPayloadActionPlans] = useState([]);
 
+  const [agendaForm, setAgendaForm] = useState({ agenda: '', discussion: '', conclusion: '' });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [actionPlanForm, setActionPlanForm] = useState({
+    actionType: '',
+    owner: '',
+    organization: '',
+    status: '',
+    deadline: new Date(),
+  });
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setActionPlanForm({
+        ...actionPlanForm,
+        deadline: selectedDate,
+      });
+    }
+  };
+
+  const handleSubmit = async (status) => {
+    
+    try {
+      const payload = {
+        id: meeting.id,
+        title: meeting.title,
+        date: meeting.date,
+        time: meeting.time,
+        participants: payloadParticipants.map(({ name, email, signature, timestamp }) => ({
+          name,
+          email,
+          signature,
+          timestamp,
+        })),
+        agendas: payloadAgendas,
+        action_plans: payloadActionPlans.map(({ actionType, owner, organization, status, deadline }) => ({
+          action_type:actionType,
+          owner,
+          organization,
+          status,
+          deadline
+        })),
+        status:status
+      };
+
+      
+
+      const response = await fetch('https://precotmeetingapp.focusrtech.com:67/rpl/meetings/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        console.log(payload)
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      Alert.alert('Success', 'Meeting details submitted successfully!');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to submit meeting details.');
+    }
+  };
+
+  const signatureRef = useRef();
   const [newParticipant, setNewParticipant] = useState({
     name: '',
     email: '',
-    actionPlan: '',
   });
+
+  // Rest of the handler functions remain the same
+  const addAgenda = () => {
+    if (!agendaForm.agenda || !agendaForm.discussion || !agendaForm.conclusion) {
+      Alert.alert('Error', 'Please fill in all Agenda fields');
+      return;
+    }
+    setAgendas([...agendas, agendaForm]);
+    setPayloadAgendas([...payloadAgendas,agendaForm]);
+    setAgendaForm({ agenda: '', discussion: '', conclusion: '' });
+  };
+
+  const addActionPlan = () => {
+    if (
+      !actionPlanForm.actionType ||
+      !actionPlanForm.owner ||
+      !actionPlanForm.organization ||
+      !actionPlanForm.status
+    ) {
+      Alert.alert('Error', 'Please fill in all Action Plan fields');
+      return;
+    }
+    setActionPlans([...actionPlans, { ...actionPlanForm }]);
+    setPayloadActionPlans([...payloadActionPlans,{...actionPlanForm}])
+    setActionPlanForm({
+      actionType: '',
+      owner: '',
+      organization: '',
+      status: '',
+      deadline: new Date(),
+    });
+  };
 
   const handleSignature = () => {
     if (signatureRef.current) {
       signatureRef.current.readSignature((signature) => {
         if (signature) {
           setSignature(signature);
-          console.log(signature);
           setShowSignature(false);
         } else {
           Alert.alert('Error', 'Please add a signature');
@@ -404,7 +511,6 @@ const MeetingDetailScreen = ({ route }) => {
       });
     }
   };
-  
 
   const handleClearSignature = () => {
     if (signatureRef.current) {
@@ -413,61 +519,164 @@ const MeetingDetailScreen = ({ route }) => {
   };
 
   const handleSaveParticipant = () => {
-    if (
-      !newParticipant.name.trim() || 
-      !newParticipant.email.trim() || 
-      !newParticipant.actionPlan.trim() 
-      // !signature
-    ) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newParticipant.name.trim() || !newParticipant.email.trim() || !signature) {
       Alert.alert('Error', 'Please fill in all fields and provide a signature');
+      return;
+    }
+
+    if (!emailRegex.test(newParticipant.email.trim())) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
 
     const participantData = {
       ...newParticipant,
       signature: signature,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(),
     };
 
     setParticipants([...participants, participantData]);
-    setNewParticipant({
-      name: '',
-      email: '',
-      actionPlan: '',
-    });
+    setPayloadParticipants([...payloadParticipants, participantData])
+    setNewParticipant({ name: '', email: '' });
     setSignature(null);
     setShowAddParticipant(false);
+  };
+
+  const handleOK = (signature) => {
+    setSignature(signature);
+    setShowSignature(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
+        <View style={{width:"100%",flexDirection:"row", justifyContent:"space-between", backgroundColor:"rgb(255,255,255)"}}>
         <View style={styles.header}>
           <Text style={styles.title}>{meeting.title}</Text>
           <Text style={styles.date}>
-            {meeting.date.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+            {meeting.date}
           </Text>
         </View>
+        {meeting.status !== "Submit" && (
+    <View style={{justifyContent: "space-between", flexDirection: "row"}}>
+        <View style={{justifyContent: "space-between", marginRight: 10}}>
+            <TouchableOpacity style={styles.addButton} onPress={() => handleSubmit("Save")}>
+                <Text style={{color: '#fff', fontSize: 16, fontWeight: '600', height: 20}}>Save</Text>
+            </TouchableOpacity>
+        </View>
+        <View style={{justifyContent: "space-between", marginLeft: 10}}>
+            <TouchableOpacity style={styles.addButton} onPress={() => handleSubmit("Submit")}>
+                <Text style={{color: '#fff', fontSize: 16, fontWeight: '600', height: 20}}>Submit</Text>
+            </TouchableOpacity>
+        </View>
+    </View>
+)}
+</View>
+
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Participants</Text>
+
+          <View>
+            <Text style={styles.sectionTitle}>Agenda</Text>
+            {agendas.map((agenda, index) => (
+              <View key={index} style={styles.participantCard}>
+                <Text>Agenda: {agenda.agenda}</Text>
+                <Text>Discussion: {agenda.discussion}</Text>
+                <Text>Conclusion: {agenda.conclusion}</Text>
+              </View>
+            ))}
+            <TextInput
+              style={styles.input}
+              placeholder="Agenda"
+              value={agendaForm.agenda}
+              onChangeText={(text) => setAgendaForm({ ...agendaForm, agenda: text })}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Discussion"
+              value={agendaForm.discussion}
+              onChangeText={(text) => setAgendaForm({ ...agendaForm, discussion: text })}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Conclusion"
+              value={agendaForm.conclusion}
+              onChangeText={(text) => setAgendaForm({ ...agendaForm, conclusion: text })}
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addAgenda}>
+              <Text style={styles.addButtonText}>+ Add Agenda</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View>
+            <Text style={styles.sectionTitle}>Action Plan</Text>
+            {actionPlans.map((plan, index) => (
+              <View key={index} style={styles.participantCard}>
+                <Text>Action Type: {plan.actionType}</Text>
+                <Text>Owner: {plan.owner}</Text>
+                <Text>Organization: {plan.organization}</Text>
+                <Text>Status: {plan.status}</Text>
+                <Text>
+                  Deadline: {new Date(plan.deadline).toLocaleDateString('en-US')}
+                </Text>
+              </View>
+            ))}
+            <TextInput
+              style={styles.input}
+              placeholder="Action Type"
+              value={actionPlanForm.actionType}
+              onChangeText={(text) => setActionPlanForm({ ...actionPlanForm, actionType: text })}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Owner"
+              value={actionPlanForm.owner}
+              onChangeText={(text) => setActionPlanForm({ ...actionPlanForm, owner: text })}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Organization"
+              value={actionPlanForm.organization}
+              onChangeText={(text) =>
+                setActionPlanForm({ ...actionPlanForm, organization: text })
+              }
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Status"
+              value={actionPlanForm.status}
+              onChangeText={(text) => setActionPlanForm({ ...actionPlanForm, status: text })}
+            />
+            <>
+    <TouchableOpacity
+      style={styles.signatureButton}
+      onPress={() => setShowDatePicker(true)} // Show the picker
+    >
+      <Text style={styles.signatureButtonText}>
+        Deadline: {actionPlanForm.deadline.toDateString()}
+      </Text>
+    </TouchableOpacity>
+
+    {showDatePicker && (
+      <DateTimePicker
+        value={actionPlanForm.deadline} // Current deadline value
+        mode="date" // Date picker mode
+        display="default" // Platform-specific default picker
+        onChange={handleDateChange} // Handle date selection
+      />
+    )}
+  </>
+            <TouchableOpacity style={styles.addButton} onPress={addActionPlan}>
+              <Text style={styles.addButtonText}>+ Add Action Plan</Text>
+            </TouchableOpacity>
+          </View>
+
           {participants.map((participant, index) => (
             <View key={index} style={styles.participantCard}>
-              <View style={styles.participantHeader}>
-                <Text style={styles.participantName}>{participant.name}</Text>
-                <Text style={styles.participantEmail}>{participant.email}</Text>
-              </View>
-
-              <View style={styles.actionPlanContainer}>
-                <Text style={styles.actionPlanTitle}>Action Plan:</Text>
-                <Text style={styles.actionPlan}>{participant.actionPlan}</Text>
-              </View>
-
+              <Text style={styles.participantName}>{participant.name}</Text>
+              <Text style={styles.participantEmail}>{participant.email}</Text>
               <View style={styles.signatureContainer}>
                 <Text style={styles.signatureLabel}>Signature:</Text>
                 <Image
@@ -476,7 +685,6 @@ const MeetingDetailScreen = ({ route }) => {
                   resizeMode="contain"
                 />
               </View>
-
               <Text style={styles.timestamp}>
                 Signed on: {new Date(participant.timestamp).toLocaleString()}
               </Text>
@@ -522,7 +730,7 @@ const MeetingDetailScreen = ({ route }) => {
               }
             />
 
-            <TextInput
+            {/* <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Action Plan"
               multiline
@@ -531,7 +739,7 @@ const MeetingDetailScreen = ({ route }) => {
               onChangeText={(text) =>
                 setNewParticipant({ ...newParticipant, actionPlan: text })
               }
-            />
+            /> */}
 
             <TouchableOpacity
               style={styles.signatureButton}
@@ -579,32 +787,34 @@ const MeetingDetailScreen = ({ route }) => {
 
       {/* Signature Modal */}
       <Modal
-  visible={showSignature}
-  animationType="slide"
-  transparent={true}
->
-  <View style={styles.signatureModalContainer}>
-    <View style={styles.signatureModalContent}>
-      <Text style={styles.signatureModalTitle}>Add Your Signature</Text>
+      visible={showSignature}
+      animationType="slide"
+      transparent={true}
+    >
+      <View style={styles.signatureModalContainer}>
+        <View style={styles.signatureModalContent}>
+          <Text style={styles.signatureModalTitle}>Add Your Signature</Text>
 
       <View style={styles.signaturePadContainer}>
-        <Signature
-          ref={signatureRef}
-          onEmpty={() => Alert.alert('Error', 'Please add a signature')}
-          descriptionText="Sign above"
-          webStyle={`.m-signature-pad--footer { display: none; margin: 0px; }`}
-          style={styles.signaturePad}
-        />
+        <SignatureScreen
+      ref={signatureRef}
+      style={styles.signaturePad}
+      onOK={handleOK}
+      onEmpty={() => Alert.alert('Error', 'Please add a signature')}
+      autoClear={true}
+      descriptionText="Sign above"
+    />
       </View>
 
       <View style={styles.signatureButtons}>
+        <View style={{flexDirection:"row",justifyContent:"flex-end"}}>
         <TouchableOpacity
           style={[styles.modalButton, styles.saveButton]}
           onPress={handleSignature}
         >
           <Text style={styles.saveButtonText}>Save</Text>
         </TouchableOpacity>
-
+        </View>
         <View style={styles.bottomButtons}>
           <TouchableOpacity
             style={[styles.modalButton, styles.clearButton]}
@@ -780,8 +990,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalButtons: {
+    // height:300,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+
+    justifyContent: 'space-between',
   },
   modalButton: {
     paddingHorizontal: 20,
@@ -791,14 +1003,21 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: '#F5F7FA',
+    width:"45%",
+    flexDirection:"row",
+    justifyContent:"center"
   },
   cancelButtonText: {
     color: '#666',
     fontSize: 16,
-    fontWeight: '600',
+    // fontWeight: '600',
+    
   },
   saveButton: {
     backgroundColor: '#007AFF',
+    width:"45%",
+    flexDirection:"row",
+    justifyContent:"center"
   },
   saveButtonText: {
     color: '#fff',
@@ -826,17 +1045,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   signaturePadContainer: {
-    width: '100%',
+    width: "100%",
     height: 300,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    overflow: 'hidden',
+    borderColor: 'rgb(232,232,232)',
+    // borderRadius: 8,
+    // overflow: 'hidden',
   },
   signaturePad: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
+    // paddingBottom:30,
+    // paddingRight:30
   },
   signatureButtons: {
     flexDirection: 'row',
@@ -861,13 +1082,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 12,
   },
-  saveButton: {
-    backgroundColor: '#007AFF',
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 45,
-  },
+  // saveButton: {
+  //   backgroundColor: '#007AFF',
+  //   width: '100%',
+  //   alignItems: 'center',
+  //   justifyContent: 'center',
+  //   height: 45,
+  // },
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
@@ -881,14 +1102,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 45,
   },
-  cancelButton: {
-    backgroundColor: '#F5F7FA',
-    flex: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 45,
-  },
+  // cancelButton: {
+  //   backgroundColor: '#F5F7FA',
+  //   flex: 1,
+  //   marginLeft: 8,
+  //   alignItems: 'center',
+  //   justifyContent: 'center',
+  //   height: 45,
+  // },
   clearButtonText: {
     color: '#FF3B30',
     fontSize: 16,
